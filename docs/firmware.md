@@ -1,59 +1,59 @@
-# Firmware 1.10 — struttura
+# Firmware 1.10 — structure
 
-File: `NKCH_ICYH108C02_Y1-10_C903.bin`, 256 KB, SHA-256 `691c612d…f747ffb26`, identico in Windows e Mac.
+File: `NKCH_ICYH108C02_Y1-10_C903.bin`, 256 KB, SHA-256 `691c612d…f747ffb26`, identical on Windows and Mac.
 
-## Microcontrollore
+## Microcontroller
 
-STM32F4 (Cortex‑M4F), dedotto da: controller della flash a `0x40023C00` con chiave `0x45670123`,
-cancellazione per settori in stile Standard Peripheral Library (`FLASH_COMPLETE = 9`),
-abilitazione FPU in `CPACR`, timer TIM9 a `0x40014000`, DMA1/DMA2 a `0x40026000/0x40026400`.
+STM32F4 (Cortex-M4F), inferred from: flash controller at `0x40023C00` with key `0x45670123`,
+sector erase in Standard Peripheral Library style (`FLASH_COMPLETE = 9`), FPU enabled in `CPACR`,
+TIM9 at `0x40014000`, DMA1/DMA2 at `0x40026000/0x40026400`.
 
-## Layout della flash
+## Flash layout
 
-| Zona | Indirizzi | Contenuto |
-|------|-----------|-----------|
-| Bootloader | `0x08000000`–`0x08004327` (settori 0–1) | vector table SP `0x20006F68`, reset `0x08003D09`; versione bootloader al byte `0x08003FFF` (= 6); le routine di scrittura flash stanno nel settore 1 |
-| Vuoto | `0x08004328`–`0x0800BFFF` | tutto a zero nel file (il settore 2 viene comunque cancellato da `C1`) |
-| Applicazione | `0x0800C000`–`0x0803FFFF` | vector table SP `0x20013CD0`, reset `0x0801F865` |
-| Coda | `0x0803FFEE` | marcatore `55 AA` (immagine valida) |
-| | `0x0803FFF4` | byte di versione applicazione (`0x1A`), restituito dal comando `C4` |
-| | `0x0803FFFE` | somma a 16 bit **big-endian** dei byte `0x00000`–`0x3FFFD` |
+| Region | Addresses | Contents |
+|--------|-----------|----------|
+| Bootloader | `0x08000000`–`0x08004327` (sectors 0–1) | vector table SP `0x20006F68`, reset `0x08003D09`; bootloader version at byte `0x08003FFF` (= 6); the flash write routines live in sector 1 |
+| Empty | `0x08004328`–`0x0800BFFF` | all zeros in the file (sector 2 is still erased by `C1`) |
+| Application | `0x0800C000`–`0x0803FFFF` | vector table SP `0x20013CD0`, reset `0x0801F865` |
+| Tail | `0x0803FFEE` | `55 AA` marker (valid image) |
+| | `0x0803FFF4` | application version byte (`0x1A`), returned by command `C4` |
+| | `0x0803FFFE` | **big-endian** 16-bit sum of bytes `0x00000`–`0x3FFFD` |
 
-Le stringhe dei descrittori USB ("MixTrack Platinum FX", "Numark", "Audio Interface",
-"Audio Config", "From PC", "To PC", anche "Akai Stage 88 MIDI-2") sono presenti in entrambe le immagini.
+The USB descriptor strings ("MixTrack Platinum FX", "Numark", "Audio Interface", "Audio Config",
+"From PC", "To PC", and also "Akai Stage 88 MIDI-2") appear in both images.
 
 ## Bootloader
 
-`FUN_0800399C` (main del bootloader):
+`FUN_0800399C` (bootloader main):
 
-1. attende ~0,5 s;
-2. se due bit di ingresso (i due CUE, dedotto) sono a 1 **e** il byte a `0x0803FFEF` vale `0xAA`,
-   disattiva SPI1/SPI3 e i DMA e salta all'applicazione a `0x0800C000`;
-3. altrimenti resta in modalità aggiornamento USB.
+1. waits ~0.5 s;
+2. if two input bits (the two CUE buttons, inferred) read 1 **and** the byte at `0x0803FFEF` is `0xAA`,
+   it shuts down SPI1/SPI3 and the DMAs and jumps to the application at `0x0800C000`;
+3. otherwise it stays in USB update mode.
 
-Comandi (`FUN_08002B38`), pacchetti da 32 byte `55 4F 01 <cmd> …`:
+Commands (`FUN_08002B38`), 32-byte packets `55 4F 01 <cmd> …`:
 
-| Cmd | Azione |
+| Cmd | Action |
 |-----|--------|
-| `C1` | cancella i settori 2–5 (`0x08008000`–`0x0803FFFF`), azzera i puntatori; base di scrittura `0xC000` |
-| `C2` | verifica la somma a 16 bit dei 16 byte dati (offset 9–24) con quella a offset 30–31; offset file a 24 bit in 4–6. Offset < `0xC000`: i primi 16 KB vengono copiati in un buffer RAM, il resto ignorato; da `0xC000` in poi scrive 16 byte in flash in sequenza |
-| `C4` | restituisce il byte di versione a `0x0803FFF4` |
-| `C3` | confronta la versione del bootloader nel file (byte `0x3FFF` del buffer) con quella installata: se è maggiore, cancella e riscrive il settore 0 dal buffer RAM (autoaggiornamento del bootloader, solo i primi 16 KB); poi riavvia |
+| `C1` | erases sectors 2–5 (`0x08008000`–`0x0803FFFF`) and resets the pointers; write base `0xC000` |
+| `C2` | checks the 16-bit sum of the 16 data bytes (offsets 9–24) against the one at offsets 30–31; 24-bit file offset in 4–6. Offsets < `0xC000`: the first 16 KB are copied into a RAM buffer, the rest is ignored; from `0xC000` on it writes 16 bytes to flash sequentially |
+| `C4` | returns the version byte at `0x0803FFF4` |
+| `C3` | compares the bootloader version in the file (byte `0x3FFF` of the buffer) with the installed one: if higher, it erases and rewrites sector 0 from the RAM buffer (bootloader self-update, first 16 KB only); then it reboots |
 
-Risposte: `55 49 01 <cmd | 0x30>` se OK, `<cmd | 0x20>` se errore.
+Replies: `55 49 01 <cmd | 0x30>` on success, `<cmd | 0x20>` on error.
 
-Nota: l'autoaggiornamento del bootloader è l'unico passaggio davvero rischioso (un'interruzione
-durante la riscrittura del settore 0 potrebbe rendere il controller irrecuperabile). Con la patch di
-questa repo non avviene, perché il byte di versione del bootloader resta 6.
+Note: the bootloader self-update is the only really risky step (an interruption while sector 0 is
+being rewritten could leave the controller unrecoverable). It does not happen with the patch in this
+repo, because the bootloader version byte stays 6.
 
-## Dati iniziali della RAM (compressi)
+## Initial RAM data (compressed)
 
-L'applicazione è compilata con ARM Compiler: lo scatter-load (`FUN_0801F764`) legge una tabella a
-`0x0801F7B0` con puntatori relativi:
+The application is built with ARM Compiler: the scatter-load routine (`FUN_0801F764`) reads a table
+at `0x0801F7B0` with relative pointers:
 
-1. azzeramento di `0x10DBC` byte da `0x20000F10` (`FUN_08010C12`);
-2. decompressione LZ (`FUN_0801F65C`) da `0x0801FA2C` (0x6C7 byte compressi) verso `0x20000000`
-   (0xF10 byte).
+1. zero-fill of `0x10DBC` bytes from `0x20000F10` (`FUN_08010C12`);
+2. LZ decompression (`FUN_0801F65C`) from `0x0801FA2C` (0x6C7 compressed bytes) to `0x20000000`
+   (0xF10 bytes).
 
-`tools/decompress_rw.py` reimplementa il decompressore; il risultato contiene le tabelle MIDI
-(note dei pad, numeri di CC, inversioni) descritte in `controlli-analogici.md` e `fader-cuts.md`.
+`tools/decompress_rw.py` reimplements the decompressor; the output contains the MIDI tables
+(pad notes, CC numbers, inversions) described in `analog-controls.md` and `fader-cuts.md`.

@@ -1,48 +1,47 @@
-# Fader Cuts nel firmware 1.10
+# Fader Cuts in firmware 1.10
 
-Indirizzi riferiti all'immagine caricata a `0x08000000` (applicazione da `0x0800C000`).
-Nomi `FUN_xxxxxxxx` = funzioni senza simboli, come le mostra Ghidra.
+Addresses refer to the image loaded at `0x08000000` (application from `0x0800C000`).
+`FUN_xxxxxxxx` names = functions without symbols, as Ghidra shows them.
 
-## Gestore dei pad — `FUN_0800DD24`
+## Pad handler — `FUN_0800DD24`
 
-Per ogni pad (indice 0–7):
+For each pad (index 0–7):
 
-- **pressione** → `FUN_0800D9A0` scrive nel buffer USB‑MIDI un *Note On*:
-  `[CIN 0x9, 0x90 | (deck + 4), nota, 0x7F]`.
-  La nota viene da una tabella in RAM (`0x20000C6C` senza SHIFT, `0x20000CAC` con SHIFT):
-  pad 1–8 → note `0x14–0x1B` (20–27), con SHIFT `0x1C–0x23` (28–35).
-  Poi, **se la modalità pad del deck vale 2 (Fader Cuts)**, chiama `FUN_08018AD2(deck, pad)`.
-- **rilascio** → `FUN_0800D91C` invia il *Note Off* corrispondente e, in Fader Cuts,
-  chiama `FUN_08018DF2(deck)`.
+- **press** → `FUN_0800D9A0` writes a *Note On* into the USB-MIDI buffer:
+  `[CIN 0x9, 0x90 | (deck + 4), note, 0x7F]`.
+  The note comes from a RAM table (`0x20000C6C` without SHIFT, `0x20000CAC` with SHIFT):
+  pads 1–8 → notes `0x14–0x1B` (20–27), with SHIFT `0x1C–0x23` (28–35).
+  Then, **if the deck's pad mode is 2 (Fader Cuts)**, it calls `FUN_08018AD2(deck, pad)`.
+- **release** → `FUN_0800D91C` sends the matching *Note Off* and, in Fader Cuts,
+  calls `FUN_08018DF2(deck)`.
 
-Per i pad 5–8 la chiamata a Fader Cuts è subordinata anche a un flag (`0x20011CA5`).
+For pads 5–8 the Fader Cuts call also depends on a flag (`0x20011CA5`).
 
-## Il motore delle sequenze
+## The sequence engine
 
-- `FUN_08018AD2(deck, pad)` carica nella struttura del deck (`0x20...` puntata da `DAT_08018FD4`,
-  32 byte per deck) uno degli 8 pattern, ne calcola la durata in funzione del tempo
-  (`FUN_080189C6`) e azzera il contatore.
-- `FUN_0800F192` → `FUN_08018E46(deck)` viene chiamata periodicamente per entrambi i deck: se la
-  sequenza è attiva avanza di passo (`FUN_08018A0E`) e ad ogni passo chiama
-  `FUN_0800F140(deck, valore)`, che invia `CC 8` (crossfader) sul canale `0xBF`
-  (o sul canale del deck) con il valore del pattern.
-- `FUN_08018DF2(deck)` azzera la struttura e chiama `FUN_0800EBC0(6)`, che rimanda la
-  posizione **reale** del crossfader (controllo analogico 6, `0xBF CC 8`).
+- `FUN_08018AD2(deck, pad)` loads one of the 8 patterns into the deck's structure (pointed to by
+  `DAT_08018FD4`, 32 bytes per deck), computes its duration from the tempo (`FUN_080189C6`) and
+  resets the counter.
+- `FUN_0800F192` → `FUN_08018E46(deck)` runs periodically for both decks: when the sequence is
+  active it advances one step (`FUN_08018A0E`) and on every step calls `FUN_0800F140(deck, value)`,
+  which sends `CC 8` (crossfader) on channel `0xBF` (or on the deck's channel) with the pattern value.
+- `FUN_08018DF2(deck)` clears the structure and calls `FUN_0800EBC0(6)`, which re-sends the
+  **real** crossfader position (analog control 6, `0xBF CC 8`).
 
-Le funzioni `FUN_08018AD2`, `FUN_08018DF2` e `FUN_08018F80` (stato "in esecuzione") sono chiamate
-**solo** da `FUN_0800DD24`.
+`FUN_08018AD2`, `FUN_08018DF2` and `FUN_08018F80` ("running" state) are called **only** from
+`FUN_0800DD24`.
 
-## La patch
+## The patch
 
 ```
 0x08018AD2:  70 B5  (push {r4-r6,lr})  ->  70 47  (bx lr)
 0x08018DF2:  10 B5  (push {r4,lr})     ->  70 47  (bx lr)
-0x0803FFFE:  somma a 16 bit big-endian di 0x00000–0x3FFFD ricalcolata  (C7 9E -> C7 22)
+0x0803FFFE:  big-endian 16-bit sum of 0x00000–0x3FFFD recomputed  (C7 9E -> C7 22)
 ```
 
-Con l'avvio della sequenza disattivato, lo stato del deck resta 0: `FUN_08018E46` non fa nulla e
-`FUN_08018F80` restituisce sempre "non attiva". Il rilascio non rimanda più il crossfader.
-I Note On/Off dei pad sono generati prima e indipendentemente, quindi restano invariati.
+With the sequence start disabled, the deck state stays 0: `FUN_08018E46` does nothing and
+`FUN_08018F80` always returns "not running". The release no longer re-sends the crossfader.
+The pads' Note On/Off messages are generated earlier and independently, so they are unchanged.
 
-Verifica: decompilando l'immagine patchata con `tools/ghidra/decompile_at.sh` le due funzioni
-risultano `void FUN_...(void) { return; }` e il gestore dei pad conserva tutte le chiamate di invio note.
+Verification: decompiling the patched image with `tools/ghidra/decompile_at.sh` shows both
+functions as `void FUN_...(void) { return; }`, and the pad handler keeps all its note-sending calls.

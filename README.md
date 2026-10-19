@@ -103,12 +103,12 @@ or just run the official updater normally.
 
 ## Technical documentation
 
-Everything reconstructed during the analysis (in Italian):
+Everything reconstructed during the analysis:
 
 - [`docs/fader-cuts.md`](docs/fader-cuts.md) — how Fader Cuts works in the firmware and why the patch is safe
 - [`docs/firmware.md`](docs/firmware.md) — flash layout, bootloader, markers, checksum, compressed data
-- [`docs/protocollo-aggiornamento.md`](docs/protocollo-aggiornamento.md) — USB HID protocol used by the updater
-- [`docs/controlli-analogici.md`](docs/controlli-analogici.md) — channel/CC map of faders and knobs, soft takeover
+- [`docs/update-protocol.md`](docs/update-protocol.md) — USB HID protocol used by the updater
+- [`docs/analog-controls.md`](docs/analog-controls.md) — channel/CC map of faders and knobs, soft takeover
 
 ## Tools
 
