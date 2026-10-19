@@ -1,0 +1,15 @@
+# Vendor binaries are never committed (copyright inMusic/Numark)
+*.bin
+*.exe
+*.dmg
+*.msi
+*.cab
+*.zip
+*.img
+# Ghidra / analysis output
+decomp.c
+functions.txt
+strings.txt
+*.gpr
+*.rep/
+__pycache__/
